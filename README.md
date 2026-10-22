@@ -1,3 +1,11 @@
+copy  iCast folder to package/kernel/,make menuconfig ,select kernel modules > DVB > iCast
+
+make prepare 
+make target/linux/compile
+make package/kernel/iCast/compile
+
+two ko files will find in build_dir/tar*/iCast/
+
 # Linux DVB driver for SMIT iCast DTMB/DVBC dual mode demodulator USB dongle
 
 #### ubuntu上使用openwrt SDK交叉编译

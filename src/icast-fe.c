@@ -24,19 +24,19 @@
 
 struct icast_state {
 	struct dvb_usb_device *dev;
-  struct dvb_frontend frontend;
-  u32 frequency;
-  u32 symbol_rate;
-  enum fe_modulation	modulation;
-  u8 lock;
-  u8 strength;
-  u16 snr;
+	struct dvb_frontend frontend;
+	u32 frequency;
+	u32 symbol_rate;
+	enum fe_modulation modulation;
+	u8 lock;
+	u8 strength;
+	u16 snr;
 };
 
 static int icast_fe_init(struct dvb_frontend *fe)
 {
 	struct icast_state *priv = fe->demodulator_priv;
-	
+
 	priv->frequency = 0;
 	priv->symbol_rate = 0;
 
@@ -52,81 +52,74 @@ static void icast_fe_release(struct dvb_frontend *fe)
 
 static int icast_fe_get_frontend(struct dvb_frontend *fe, struct dtv_frontend_properties *props)
 {
-  struct icast_state *priv = fe->demodulator_priv;
+	struct icast_state *priv = fe->demodulator_priv;
 
-  fe->dtv_property_cache.frequency = priv->frequency;
-  fe->dtv_property_cache.symbol_rate = priv->symbol_rate;
+	fe->dtv_property_cache.frequency = priv->frequency;
+	fe->dtv_property_cache.symbol_rate = priv->symbol_rate;
 
-  return 0;
+	return 0;
 }
 
 #define DWORD_TO_BYTES(dword, bytes, position) \
-  bytes[position] = (u8)(dword & 0xFF); \
-  bytes[position+1] = (u8)((dword>>8) & 0xFF); \
-  bytes[position+2] = (u8)((dword>>16) & 0xFF); \
-  bytes[position+3] = (u8)((dword>>24) & 0xFF);
+	do { \
+		bytes[position] = (u8)(dword & 0xFF); \
+		bytes[position+1] = (u8)((dword>>8) & 0xFF); \
+		bytes[position+2] = (u8)((dword>>16) & 0xFF); \
+		bytes[position+3] = (u8)((dword>>24) & 0xFF); \
+	} while (0)
 
 static int icast_fe_set_frontend(struct dvb_frontend *fe)
 {
-  u8 cmd9[32] = {
-  	0x01, 0x90, 0x02, 0x00, 0x03, 0x9F, 0x9A, 0x07,
-  	0x17,	0x00, 0x00, 0x14, 0x00, 0x03, 0x00, 0x10,
-  	0xB8,	0xF3, 0x03, 0x00, 0xDB, 0x1A, 0x00, 0x00,
-  	0x40,	0x00, 0x00, 0x00, 0x08, 0x01, 0x00, 0x00
-  }; 
-  u8 buf[900];
-  u32 frequency, symbol_rate;
-  struct icast_state *priv = fe->demodulator_priv;
+	u8 cmd9[32] = {
+		0x01, 0x90, 0x02, 0x00, 0x03, 0x9F, 0x9A, 0x07,
+		0x17, 0x00, 0x00, 0x14, 0x00, 0x03, 0x00, 0x10,
+		0xB8, 0xF3, 0x03, 0x00, 0xDB, 0x1A, 0x00, 0x00,
+		0x40, 0x00, 0x00, 0x00, 0x08, 0x01, 0x00, 0x00
+	};
+	u8 buf[900];
+	u32 frequency, symbol_rate;
+	struct icast_state *priv = fe->demodulator_priv;
 
 	frequency = (u32)(fe->dtv_property_cache.frequency / 1000);
-  DWORD_TO_BYTES(frequency, cmd9, 16);
-  
-  if ( fe->dtv_property_cache.delivery_system == SYS_DVBC_ANNEX_A)
-  {
+	DWORD_TO_BYTES(frequency, cmd9, 16);
+
+	if (fe->dtv_property_cache.delivery_system == SYS_DVBC_ANNEX_A) {
 		symbol_rate = (u32)(fe->dtv_property_cache.symbol_rate / 1000);
-    DWORD_TO_BYTES(symbol_rate, cmd9, 20);
-    
-    switch ( fe->dtv_property_cache.modulation )
-    {
-      case QAM_16:
-      	DWORD_TO_BYTES(16, cmd9, 24);
-        break;
-      case QAM_32:
-      	DWORD_TO_BYTES(32, cmd9, 24);
-        break;
-      case QAM_64:
-      	DWORD_TO_BYTES(64, cmd9, 24);
-        break;
-      case QAM_128:
-      	DWORD_TO_BYTES(128, cmd9, 24);
-        break;
-      case QAM_256:
-      	DWORD_TO_BYTES(256, cmd9, 24);
-        break;
-      default:
-        break;
-    }
-  }
-  else
-  {
-  	DWORD_TO_BYTES(0, cmd9, 20);
-    DWORD_TO_BYTES(0, cmd9, 24);
-    DWORD_TO_BYTES(8, cmd9, 28);
-  }
+		DWORD_TO_BYTES(symbol_rate, cmd9, 20);
 
-  smit_set(priv->dev->udev, 0xA0u, cmd9, 32, 100);
+		switch (fe->dtv_property_cache.modulation) {
+		case QAM_16:  DWORD_TO_BYTES(16, cmd9, 24);  break;
+		case QAM_32:  DWORD_TO_BYTES(32, cmd9, 24);  break;
+		case QAM_64:  DWORD_TO_BYTES(64, cmd9, 24);  break;
+		case QAM_128: DWORD_TO_BYTES(128, cmd9, 24); break;
+		case QAM_256: DWORD_TO_BYTES(256, cmd9, 24); break;
+		default: break;
+		}
+	} else {
+		DWORD_TO_BYTES(0, cmd9, 20);
+		DWORD_TO_BYTES(0, cmd9, 24);
 
-  smit_tuner_stat(priv->dev->udev, buf, 2);
+		if (fe->dtv_property_cache.bandwidth_hz == 7000000) {
+			DWORD_TO_BYTES(7, cmd9, 28);
+		} else if (fe->dtv_property_cache.bandwidth_hz == 6000000) {
+			DWORD_TO_BYTES(6, cmd9, 28);
+		} else {
+			DWORD_TO_BYTES(8, cmd9, 28);
+		}
+	}
 
-  priv->frequency = fe->dtv_property_cache.frequency;
-  priv->symbol_rate = fe->dtv_property_cache.symbol_rate;
-  priv->modulation = fe->dtv_property_cache.modulation;
+	smit_set(priv->dev->udev, 0xA0u, cmd9, 32, 100);
+	smit_tuner_stat(priv->dev->udev, buf, 2);
 
-  return 0;
+	priv->frequency = fe->dtv_property_cache.frequency;
+	priv->symbol_rate = fe->dtv_property_cache.symbol_rate;
+	priv->modulation = fe->dtv_property_cache.modulation;
+
+	return 0;
 }
 
 static int icast_fe_get_tune_settings(struct dvb_frontend *fe,
-			      struct dvb_frontend_tune_settings *fesettings)
+				      struct dvb_frontend_tune_settings *fesettings)
 {
 	fesettings->min_delay_ms = 800;
 	fesettings->step_size = 0;
@@ -136,58 +129,53 @@ static int icast_fe_get_tune_settings(struct dvb_frontend *fe,
 
 static int icast_fe_read_status(struct dvb_frontend *fe, enum fe_status *status)
 {
-  struct icast_state *priv = fe->demodulator_priv;
-  u8 cmd12[20] = {
-  	0x01, 0x90, 0x02, 0x00, 0x03, 0x9F, 0x9A, 0x07,
-  	0x0B, 0x01, 0x00, 0x08, 0x00, 0x05, 0x00, 0x04,
-  	0x47, 0x53, 0x54, 0x41
-  };
-  u8 buf[900];
+	struct icast_state *priv = fe->demodulator_priv;
+	u8 cmd12[20] = {
+		0x01, 0x90, 0x02, 0x00, 0x03, 0x9F, 0x9A, 0x07,
+		0x0B, 0x01, 0x00, 0x08, 0x00, 0x05, 0x00, 0x04,
+		0x47, 0x53, 0x54, 0x41
+	};
+	u8 buf[900];
 
-  smit_set(priv->dev->udev, 0xA0u, cmd12, 20, 50);
+	smit_set(priv->dev->udev, 0xA0u, cmd12, 20, 50);
 
-  if ( smit_tuner_stat(priv->dev->udev, buf, 5) != 32 )
-  {
-    return 0;
-  }
-  priv->lock = (u8)buf[29];
+	if (smit_tuner_stat(priv->dev->udev, buf, 5) != 32)
+		return 0;
 
-  if ( buf[29] == 0 )
-  {
-    *status = 0;
-  }
-  else
-  {
-    *status = FE_HAS_SIGNAL | FE_HAS_LOCK;
+	priv->lock = (u8)buf[29];
+
+	if (buf[29] == 0) {
+		*status = 0;
+	} else {
+		*status = FE_HAS_SIGNAL | FE_HAS_LOCK;
 
 		priv->frequency = (buf[19]<<24) + (buf[18]<<16) + (buf[17]<<8) + buf[16];
-    priv->snr = (u8)buf[30];
-    priv->strength = (u8)buf[31];
-//    printk("buf[30]=%02X buf[31]=%02X", buf[30], buf[31]);
-  }
-  return 0;
+		priv->snr = (u8)buf[30];
+		priv->strength = (u8)buf[31];
+	}
+	return 0;
 }
 
 static int icast_fe_read_signal_strength(struct dvb_frontend *fe, u16 *strength)
 {
-  struct icast_state *priv = fe->demodulator_priv;
+	struct icast_state *priv = fe->demodulator_priv;
 
-  *strength = 0;
-  if ( priv->lock )
-    *strength = ((s64)((u64)(90070618176225 * (u8)priv->strength) >> 32) >> 5)
-              - (0xFFFF * (u8)priv->strength >> 31);
-  return 0;
+	*strength = 0;
+	if (priv->lock)
+		*strength = ((s64)((u64)(90070618176225 * (u8)priv->strength) >> 32) >> 5)
+			  - (0xFFFF * (u8)priv->strength >> 31);
+	return 0;
 }
 
 static int icast_fe_read_snr(struct dvb_frontend *fe, u16 *snr)
 {
-  struct icast_state *priv = fe->demodulator_priv;
+	struct icast_state *priv = fe->demodulator_priv;
 
-  *snr = 0;
-  if ( priv->lock )
-    *snr = ((s64)((u64)(90070618176225 * (u8)priv->snr) >> 32) >> 5)
-         - (0xFFFF * (u8)priv->snr >> 31);
-  return 0;
+	*snr = 0;
+	if (priv->lock)
+		*snr = ((s64)((u64)(90070618176225 * (u8)priv->snr) >> 32) >> 5)
+		     - (0xFFFF * (u8)priv->snr >> 31);
+	return 0;
 }
 
 static const struct dvb_frontend_ops icast_dual_mode_fe_ops = {
@@ -257,19 +245,15 @@ struct dvb_frontend *icast_fe_attach(struct dvb_usb_adapter *adap, const struct 
 	priv = kzalloc(sizeof(struct icast_state), GFP_KERNEL);
 	if (priv == NULL)
 		return NULL;
-	
-  if (config->dtmb)
-  {
-  	memcpy(&priv->frontend.ops, &icast_dual_mode_fe_ops, sizeof(struct dvb_frontend_ops));
-  }
-  else
-  {
-  	memcpy(&priv->frontend.ops, &icast_single_mode_fe_ops, sizeof(struct dvb_frontend_ops));
-  }
-	
+
+	if (config->dtmb)
+		memcpy(&priv->frontend.ops, &icast_dual_mode_fe_ops, sizeof(struct dvb_frontend_ops));
+	else
+		memcpy(&priv->frontend.ops, &icast_single_mode_fe_ops, sizeof(struct dvb_frontend_ops));
+
 	priv->frontend.demodulator_priv = priv;
 	priv->dev = adap->dev;
-	
+
 	return &priv->frontend;
 }
 
@@ -278,4 +262,3 @@ EXPORT_SYMBOL_GPL(icast_fe_attach);
 MODULE_DESCRIPTION("iCast frontend driver");
 MODULE_AUTHOR("Xiaodong Ni <nxiaodong520@gmail.com>");
 MODULE_LICENSE("GPL");
-

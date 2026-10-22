@@ -22,8 +22,8 @@
 
 //#define CONFIG_DYNAMIC_DEBUG
 
-#define USB_VID_SMIT							0x29DF
-#define USB_PID_SMIT_ICAST				0x0001
+#define USB_VID_SMIT		0x29DF
+#define USB_PID_SMIT_ICAST	0x0001
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
@@ -54,7 +54,13 @@ static struct dvb_usb_device_properties icast_properties = {
 		{
 		.num_frontends = 1,
 		.fe = {{
-			.caps = DVB_USB_ADAP_HAS_PID_FILTER,
+			/*
+			 * 原为 DVB_USB_ADAP_HAS_PID_FILTER，但底层 demux 的
+			 * filternum/feednum 未正确设置，导致 dvb_dmx_init 中
+			 * vmalloc(0) 失败并返回 -12 (-ENOMEM)。
+			 * 改为 0，走软件 demux 路径。
+			 */
+			.caps = 0,
 			.frontend_attach  = icast_frontend_attach,
 			.stream = {
 				.type = USB_BULK,
@@ -66,14 +72,14 @@ static struct dvb_usb_device_properties icast_properties = {
 					}
 				}
 			},
-		}},	
+		}},
 		},
 	},
 	.num_device_descs = 1,
 	.devices = {
 		{
 			.name = "iCast DVB USB DONGLE adapter",
-		  .warm_ids = {&icast_id_table[0], NULL},
+			.warm_ids = {&icast_id_table[0], NULL},
 		},
 	}
 };
@@ -81,40 +87,46 @@ static struct dvb_usb_device_properties icast_properties = {
 static int smit_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
 	struct usb_device *udev;
-  int size;
-  int ret;
-  u8 *buf;
+	int size;
+	int ret;
+	u8 *buf;
 
-  udev = interface_to_usbdev(intf);
+	udev = interface_to_usbdev(intf);
 
-  buf = kmalloc(4, GFP_KERNEL);
-  buf[0] = 0xFE;
-  buf[1] = 0x00;
-  buf[2] = 0x10;
-  buf[3] = 0x00;
-  
-  ret = usb_bulk_msg(udev, usb_sndbulkpipe(udev, SMIT_BULK_ENDPOINT_CMD_SEND), buf, 4, &size, 500);
-  if ( ret==0 )
-  {
-    ret = usb_bulk_msg(udev, usb_rcvbulkpipe(udev, SMIT_BULK_ENDPOINT_CMD_RECEIVE), buf, 4, &size, 500);
-    if ( ret==0 )
-    {
-	    ret = smit_init(udev, &icast_config.dtmb);
-	    if ( ret==0 )
-    	{
-    		if (0 == dvb_usb_device_init(intf, &icast_properties, THIS_MODULE, 0LL, adapter_nr))
-    		{
-    			kfree(buf);
-    			return 0;
-    		}
-    	}
-    }
-  }
-  
-  smit_reset(udev);
-  kfree(buf);
-  
-  return -EINVAL;
+	buf = kmalloc(4, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	buf[0] = 0xFE;
+	buf[1] = 0x00;
+	buf[2] = 0x10;
+	buf[3] = 0x00;
+
+	ret = usb_bulk_msg(udev, usb_sndbulkpipe(udev, SMIT_BULK_ENDPOINT_CMD_SEND),
+			   buf, 4, &size, 500);
+	if (ret)
+		goto err_free;
+
+	ret = usb_bulk_msg(udev, usb_rcvbulkpipe(udev, SMIT_BULK_ENDPOINT_CMD_RECEIVE),
+			   buf, 4, &size, 500);
+	if (ret)
+		goto err_free;
+
+	ret = smit_init(udev, &icast_config.dtmb);
+	if (ret)
+		goto err_free;
+
+	ret = dvb_usb_device_init(intf, &icast_properties, THIS_MODULE, 0LL, adapter_nr);
+	if (ret)
+		goto err_free;
+
+	kfree(buf);
+	return 0;
+
+err_free:
+	smit_reset(udev);
+	kfree(buf);
+	return ret;
 }
 
 static struct usb_driver smit_driver = {
@@ -144,4 +156,3 @@ module_exit(smit_module_exit);
 MODULE_DESCRIPTION("SMIT iCast dvb driver");
 MODULE_AUTHOR("Xiaodong Ni <nxiaodong520@gmail.com>");
 MODULE_LICENSE("GPL");
-
