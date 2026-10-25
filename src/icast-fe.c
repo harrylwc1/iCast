@@ -81,6 +81,13 @@ static int icast_fe_set_frontend(struct dvb_frontend *fe)
 	struct icast_state *priv = fe->demodulator_priv;
 
 	frequency = (u32)(fe->dtv_property_cache.frequency / 1000);
+
+	pr_info("icast-fe: set_frontend freq=%u Hz (%u kHz) bw=%u delsys=%u mod=%u\n",
+		fe->dtv_property_cache.frequency, frequency,
+		fe->dtv_property_cache.bandwidth_hz,
+		fe->dtv_property_cache.delivery_system,
+		fe->dtv_property_cache.modulation);
+
 	DWORD_TO_BYTES(frequency, cmd9, 16);
 
 	if (fe->dtv_property_cache.delivery_system == SYS_DVBC_ANNEX_A) {
@@ -108,8 +115,14 @@ static int icast_fe_set_frontend(struct dvb_frontend *fe)
 		}
 	}
 
+	pr_info("icast-fe: cmd9[16..19]=%02x %02x %02x %02x cmd9[28]=%02x\n",
+		cmd9[16], cmd9[17], cmd9[18], cmd9[19], cmd9[28]);
+
 	smit_set(priv->dev->udev, 0xA0u, cmd9, 32, 100);
 	smit_tuner_stat(priv->dev->udev, buf, 2);
+
+	pr_info("icast-fe: after tuner_stat buf[0..3]=%02x %02x %02x %02x\n",
+		buf[0], buf[1], buf[2], buf[3]);
 
 	priv->frequency = fe->dtv_property_cache.frequency;
 	priv->symbol_rate = fe->dtv_property_cache.symbol_rate;
@@ -121,7 +134,7 @@ static int icast_fe_set_frontend(struct dvb_frontend *fe)
 static int icast_fe_get_tune_settings(struct dvb_frontend *fe,
 				      struct dvb_frontend_tune_settings *fesettings)
 {
-	fesettings->min_delay_ms = 800;
+	fesettings->min_delay_ms = 1200;
 	fesettings->step_size = 0;
 	fesettings->max_drift = 0;
 	return 0;
@@ -136,10 +149,24 @@ static int icast_fe_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		0x47, 0x53, 0x54, 0x41
 	};
 	u8 buf[900];
+	int ret;
+	int retry;
 
 	smit_set(priv->dev->udev, 0xA0u, cmd12, 20, 50);
 
-	if (smit_tuner_stat(priv->dev->udev, buf, 5) != 32)
+	for (retry = 0; retry < 5; retry++) {
+		ret = smit_tuner_stat(priv->dev->udev, buf, 5);
+		if (ret == 32)
+			break;
+		msleep(100);
+	}
+
+	pr_info("icast-fe: read_status ret=%d lock_byte=%02x snr=%02x strength=%02x\n",
+		ret, (ret == 32) ? buf[29] : 0xFF,
+		(ret == 32) ? buf[30] : 0xFF,
+		(ret == 32) ? buf[31] : 0xFF);
+
+	if (ret != 32)
 		return 0;
 
 	priv->lock = (u8)buf[29];

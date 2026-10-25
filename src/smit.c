@@ -20,6 +20,8 @@ struct st_smit_pack {
 
 /*
  * 始终使用 kmalloc 分配传输缓冲区，保证 DMA 映射安全。
+ * 栈缓冲在部分 ARM 平台不可 DMA，会导致
+ * usb_hcd_map_urb_for_dma 失败，传输数据不完整。
  */
 int smit_usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe, void *data, int len, int *actual_length, int timeout)
 {
@@ -180,6 +182,9 @@ int smit_tuner_stat(struct usb_device *udev, u8 *out, int checkcount)
 
 	memcpy(out, smit.data, ret);
 
+	pr_info("smit: tuner_stat datalen=%d actual_length=%d tag=%02x req=%02x\n",
+		ret, actual_length, smit.tag, smit.req);
+
 	if ((ret >= actual_length ||
 	     smit.data[ret] != 0x80 ||
 	     smit.data[ret + 3] != 0x80) && checkcount > 0) {
@@ -252,6 +257,17 @@ int smit_init(struct usb_device *udev, u8 *dtmb)
 	smit_set(udev, 0xA0, cmd14, 20, 100);
 	len = smit_tuner_stat(udev, buf, 0);
 
+	pr_info("smit: init len=%d\n", len);
+	if (len > 0 && len <= (int)sizeof(buf)) {
+		int i;
+		pr_info("smit: buf[0..31]=");
+		for (i = 0; i < 32 && i < len; i++)
+			pr_cont("%02x ", buf[i]);
+		pr_cont("\n");
+		if (len > 18)
+			pr_info("smit: buf+18='%s'\n", buf + 18);
+	}
+
 	if (dtmb) {
 		if (len > 18 && len < (int)sizeof(buf)) {
 			buf[len] = '\0';
@@ -259,6 +275,7 @@ int smit_init(struct usb_device *udev, u8 *dtmb)
 		} else {
 			*dtmb = 0;
 		}
+		pr_info("smit: DTMB detected=%d\n", *dtmb);
 	}
 
 	if (dtmb && !*dtmb) {
