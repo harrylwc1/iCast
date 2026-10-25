@@ -1,4 +1,5 @@
 git clone https://github.com/harrylwc1/iCast
+
 copy iCast folder to package/kernel/,make menuconfig ,select kernel modules > DVB > iCast
 
 make prepare 
