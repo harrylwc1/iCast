@@ -10,7 +10,7 @@ make package/kernel/iCast/compile
 
 two ko files will find in build_dir/tar*/iCast/
 
-kmod ipk/apk will find in bin/targets/\*/3packages/\*/kmod-iCast_\*.ipk 
+kmod ipk/apk will find in bin/targets/\*/packages/\*/kmod-iCast_\*.ipk 
 
 # Linux DVB driver for SMIT iCast DTMB/DVBC dual mode demodulator USB dongle
 
