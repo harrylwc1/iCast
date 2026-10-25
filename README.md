@@ -10,14 +10,14 @@ make package/kernel/iCast/compile
 
 two ko files will find in build_dir/tar*/iCast/
 
-kmod ipk/apk will find in bin/targets/*/packages/*/kmod-iCast_*.ipk 
+kmod ipk/apk will find in bin/targets/\*/3packages/\*/kmod-iCast_\*.ipk 
 
 # Linux DVB driver for SMIT iCast DTMB/DVBC dual mode demodulator USB dongle
 
 #### ubuntu上使用openwrt SDK交叉编译
 
 ```shell
-#下载SDK并解压(相应固件的SDK包或者交叉编译链)
+下载SDK并解压(相应固件的SDK包或者交叉编译链)
 wget https://downloads.immortalwrt.org/releases/23.05.2/targets/x86/64/immortalwrt-sdk-23.05.2-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
 tar xvf immortalwrt-sdk-23.05.2-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz
 
