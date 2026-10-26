@@ -82,6 +82,19 @@ static int icast_fe_set_frontend(struct dvb_frontend *fe)
 
 	frequency = (u32)(fe->dtv_property_cache.frequency / 1000);
 
+	/*
+	 * 防御 TVHeadend 偶发下发错误频率（如 594000 Hz）。
+	 * 如果频率低于 100 MHz，则拒绝该输入，使用上一次成功的频率，
+	 * 或者兜底使用 594 MHz，防止芯片硬件状态机卡死并返回 datalen=1。
+	 */
+	if (frequency < 100000) {
+		pr_err("icast-fe: reject invalid freq=%u kHz, using last freq=%u kHz\n",
+		       frequency, priv->frequency / 1000);
+		frequency = priv->frequency / 1000;
+		if (frequency < 100000)
+			frequency = 594000; /* 兜底频率 594MHz */
+	}
+
 	pr_info("icast-fe: set_frontend freq=%u Hz (%u kHz) bw=%u delsys=%u mod=%u\n",
 		fe->dtv_property_cache.frequency, frequency,
 		fe->dtv_property_cache.bandwidth_hz,
@@ -119,6 +132,11 @@ static int icast_fe_set_frontend(struct dvb_frontend *fe)
 		cmd9[16], cmd9[17], cmd9[18], cmd9[19], cmd9[28]);
 
 	smit_set(priv->dev->udev, 0xA0u, cmd9, 32, 100);
+
+	/*
+	 * 调谐命令发出后稍等，再读一次初始状态。
+	 */
+	msleep(200);
 	smit_tuner_stat(priv->dev->udev, buf, 2);
 
 	pr_info("icast-fe: after tuner_stat buf[0..3]=%02x %02x %02x %02x\n",
@@ -134,7 +152,7 @@ static int icast_fe_set_frontend(struct dvb_frontend *fe)
 static int icast_fe_get_tune_settings(struct dvb_frontend *fe,
 				      struct dvb_frontend_tune_settings *fesettings)
 {
-	fesettings->min_delay_ms = 1200;
+	fesettings->min_delay_ms = 2000;
 	fesettings->step_size = 0;
 	fesettings->max_drift = 0;
 	return 0;
@@ -154,9 +172,9 @@ static int icast_fe_read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 	smit_set(priv->dev->udev, 0xA0u, cmd12, 20, 50);
 
-	for (retry = 0; retry < 5; retry++) {
+	for (retry = 0; retry < 10; retry++) {
 		ret = smit_tuner_stat(priv->dev->udev, buf, 5);
-		if (ret == 32)
+		if (ret == 32 && buf[29] != 0)
 			break;
 		msleep(100);
 	}
