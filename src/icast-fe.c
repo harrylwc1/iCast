@@ -172,7 +172,7 @@ static int icast_fe_read_status(struct dvb_frontend *fe, enum fe_status *status)
 
 	smit_set(priv->dev->udev, 0xA0u, cmd12, 20, 50);
 
-	for (retry = 0; retry < 10; retry++) {
+	for (retry = 0; retry < 5; retry++) {
 		ret = smit_tuner_stat(priv->dev->udev, buf, 5);
 		if (ret == 32 && buf[29] != 0)
 			break;
@@ -184,8 +184,18 @@ static int icast_fe_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		(ret == 32) ? buf[30] : 0xFF,
 		(ret == 32) ? buf[31] : 0xFF);
 
-	if (ret != 32)
+	if (ret != 32) {
+		/*
+		 * 芯片在 594MHz 下可能因为数据流过大导致状态机假死。
+		 * 不要调用 smit_reset，否则会切断 USB 导致内核报 module_put 崩溃。
+		 * 直接返回 0（未锁定），让 TVH 触发 poll TIMEOUT 重新调谐。
+		 */
+		pr_err("icast-fe: tuner dead (ret=%d), expecting TVH timeout\n", ret);
+		priv->lock = 0;
+		priv->strength = 0;
+		priv->snr = 0;
 		return 0;
+	}
 
 	priv->lock = (u8)buf[29];
 
