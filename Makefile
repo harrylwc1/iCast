@@ -14,6 +14,7 @@ define KernelPackage/iCast
          $(LINUX_DIR)/drivers/usb/core/usbcore.ko \
          $(LINUX_DIR)/drivers/usb/common/usb-common.ko \
          $(LINUX_DIR)/fs/nls/nls_base.ko \
+         $(LINUX_DIR)/drivers/media/mc/mc.ko \
          $(LINUX_DIR)/drivers/media/dvb-core/dvb-core.ko \
          $(LINUX_DIR)/drivers/media/usb/dvb-usb/dvb-usb.ko \
          $(LINUX_DIR)/drivers/media/rc/rc-core.ko \
