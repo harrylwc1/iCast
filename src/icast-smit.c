@@ -54,12 +54,6 @@ static struct dvb_usb_device_properties icast_properties = {
 		{
 		.num_frontends = 1,
 		.fe = {{
-			/*
-			 * 原为 DVB_USB_ADAP_HAS_PID_FILTER，但底层 demux 的
-			 * filternum/feednum 未正确设置，导致 dvb_dmx_init 中
-			 * vmalloc(0) 失败并返回 -12 (-ENOMEM)。
-			 * 改为 0，走软件 demux 路径。
-			 */
 			.caps = 0,
 			.frontend_attach  = icast_frontend_attach,
 			.stream = {

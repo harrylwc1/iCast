@@ -81,6 +81,18 @@ static int icast_fe_set_frontend(struct dvb_frontend *fe)
 	struct icast_state *priv = fe->demodulator_priv;
 
 	frequency = (u32)(fe->dtv_property_cache.frequency / 1000);
+
+	/*
+	 * 防御 TVHeadend 偶发下发错误频率（如 594000 Hz）。
+	 * 如果频率低于 100 MHz，则拒绝该输入，使用上一次成功的频率，
+	 * 或者兜底使用 594 MHz，防止芯片硬件状态机卡死。
+	 */
+	if (frequency < 100000) {
+		frequency = priv->frequency / 1000;
+		if (frequency < 100000)
+			frequency = 594000; /* 兜底频率 594MHz */
+	}
+
 	DWORD_TO_BYTES(frequency, cmd9, 16);
 
 	if (fe->dtv_property_cache.delivery_system == SYS_DVBC_ANNEX_A) {
@@ -109,6 +121,8 @@ static int icast_fe_set_frontend(struct dvb_frontend *fe)
 	}
 
 	smit_set(priv->dev->udev, 0xA0u, cmd9, 32, 100);
+
+	msleep(200);
 	smit_tuner_stat(priv->dev->udev, buf, 2);
 
 	priv->frequency = fe->dtv_property_cache.frequency;
@@ -121,7 +135,7 @@ static int icast_fe_set_frontend(struct dvb_frontend *fe)
 static int icast_fe_get_tune_settings(struct dvb_frontend *fe,
 				      struct dvb_frontend_tune_settings *fesettings)
 {
-	fesettings->min_delay_ms = 800;
+	fesettings->min_delay_ms = 2000;
 	fesettings->step_size = 0;
 	fesettings->max_drift = 0;
 	return 0;
@@ -136,11 +150,28 @@ static int icast_fe_read_status(struct dvb_frontend *fe, enum fe_status *status)
 		0x47, 0x53, 0x54, 0x41
 	};
 	u8 buf[900];
+	int ret;
+	int retry;
 
 	smit_set(priv->dev->udev, 0xA0u, cmd12, 20, 50);
 
-	if (smit_tuner_stat(priv->dev->udev, buf, 5) != 32)
+	for (retry = 0; retry < 5; retry++) {
+		ret = smit_tuner_stat(priv->dev->udev, buf, 5);
+		if (ret == 32 && buf[29] != 0)
+			break;
+		msleep(100);
+	}
+
+	if (ret != 32) {
+		/*
+		 * 芯片在高负荷频点下可能假死。
+		 * 直接返回 0（未锁定），交由上层超时重试，不强行复位。
+		 */
+		priv->lock = 0;
+		priv->strength = 0;
+		priv->snr = 0;
 		return 0;
+	}
 
 	priv->lock = (u8)buf[29];
 
